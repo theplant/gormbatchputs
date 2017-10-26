@@ -1,7 +1,6 @@
 package gormbatchputs
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 
@@ -48,7 +47,6 @@ func (b *Batcher) PreProcessors(procs ...RowPreProcessor) (r *Batcher) {
 
 func (b *Batcher) Put(objects interface{}) (err error) {
 	val := reflect.ValueOf(objects)
-	fmt.Println(val.Kind())
 	if val.Kind() != reflect.Array && val.Kind() != reflect.Slice {
 		panic("parameter must be array or slice")
 	}
@@ -61,11 +59,13 @@ func (b *Batcher) Put(objects interface{}) (err error) {
 	scp := b.db.NewScope(v)
 	tableName := scp.TableName()
 
-	fields := b.calcColumns(scp.Fields())
+	fields := removeRelationships(b.calcColumns(scp.Fields()))
+
 	columns := []string{}
 	for _, f := range fields {
 		columns = append(columns, f.DBName)
 	}
+
 	var primaryKeyColumn = scp.PrimaryKey()
 	var rows [][]interface{}
 
@@ -112,6 +112,16 @@ func (b *Batcher) processRow(row interface{}) (skip bool, err error) {
 		if err != nil {
 			return
 		}
+	}
+	return
+}
+
+func removeRelationships(fields []*gorm.Field) (results []*gorm.Field) {
+	for _, f := range fields {
+		if f.Relationship != nil {
+			continue
+		}
+		results = append(results, f)
 	}
 	return
 }

@@ -186,6 +186,15 @@ var hData = []*DeliveryHub{
 		},
 	},
 }
+var expectedHData = []*DeliveryHub{
+	{
+		Name:                   "Trinet",
+		NumberOfDay:            20,
+		DefaultSiteInterval:    5,
+		CyclicDisposeWeekdays:  []uint{1, 2},
+		CyclicDeliveryWeekdays: []uint{3},
+	},
+}
 
 var data = []*Country{
 	{
@@ -218,17 +227,45 @@ var data = []*Country{
 	},
 }
 
+var findCountriesFunc = func(db *gorm.DB) interface{} {
+	var countries []*Country
+	err := db.Order("code ASC").Find(&countries).Error
+	if err != nil {
+		panic(err)
+	}
+	return countries
+}
+
+var findDeliveryHubFunc = func(db *gorm.DB) interface{} {
+	var dh []*DeliveryHub
+	err := db.Order("name ASC").Find(&dh).Error
+	if err != nil {
+		panic(err)
+	}
+	return dh
+}
+
 var putCases = []struct {
 	name            string
 	data            interface{}
 	onlyColumns     []string
 	excludeColumns  []string
 	preProcessors   []gormbatchputs.RowPreProcessor
-	expectedResults []*Country
+	findFunc        func(db *gorm.DB) interface{}
+	expectedResults interface{}
+	stop            bool
 }{
+	{
+		name:            "tree data",
+		data:            hData,
+		findFunc:        findDeliveryHubFunc,
+		expectedResults: expectedHData,
+		// stop:            true,
+	},
 	{
 		name:        "only code and short_name",
 		data:        data,
+		findFunc:    findCountriesFunc,
 		onlyColumns: []string{"code", "short_name"},
 		expectedResults: []*Country{
 			{
@@ -248,6 +285,7 @@ var putCases = []struct {
 	{
 		name:           "exclude special_notes",
 		data:           data,
+		findFunc:       findCountriesFunc,
 		excludeColumns: []string{"special_notes"},
 		expectedResults: []*Country{
 			{
@@ -280,6 +318,7 @@ var putCases = []struct {
 	{
 		name:           "set count to 100",
 		data:           data,
+		findFunc:       findCountriesFunc,
 		excludeColumns: []string{"special_notes"},
 		preProcessors: []gormbatchputs.RowPreProcessor{
 			func(row interface{}) (skip bool, err error) {
@@ -319,6 +358,7 @@ var putCases = []struct {
 	{
 		name:           "skip BEN",
 		data:           data,
+		findFunc:       findCountriesFunc,
 		excludeColumns: []string{"special_notes"},
 		preProcessors: []gormbatchputs.RowPreProcessor{
 			func(row interface{}) (skip bool, err error) {
@@ -372,15 +412,15 @@ func TestPut(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var countries []*Country
-		err = db.Order("code ASC").Find(&countries).Error
-		if err != nil {
-			t.Fatal(err)
-		}
 
-		diff := testingutils.PrettyJsonDiff(c.expectedResults, countries)
+		result := c.findFunc(db)
+
+		diff := testingutils.PrettyJsonDiff(c.expectedResults, result)
 		if len(diff) > 0 {
 			t.Error(c.name, diff)
+		}
+		if c.stop {
+			panic("stop")
 		}
 	}
 }
