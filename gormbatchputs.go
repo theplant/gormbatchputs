@@ -1,6 +1,7 @@
 package gormbatchputs
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -58,14 +59,13 @@ func (b *Batcher) Put(objects interface{}) (err error) {
 	v := val.Index(0).Interface()
 	scp := b.db.NewScope(v)
 	tableName := scp.TableName()
+	if len(scp.PrimaryFields()) != 1 {
+		return fmt.Errorf("table `%s` must have exactly one primary column, but has %v", tableName, fieldColumns(scp.PrimaryFields()))
+	}
 
 	fields := removeRelationships(b.calcColumns(scp.Fields()))
 
-	columns := []string{}
-	for _, f := range fields {
-		columns = append(columns, f.DBName)
-	}
-
+	columns := fieldColumns(fields)
 	var primaryKeyColumn = scp.PrimaryKey()
 	var rows [][]interface{}
 
@@ -112,6 +112,13 @@ func (b *Batcher) processRow(row interface{}) (skip bool, err error) {
 		if err != nil {
 			return
 		}
+	}
+	return
+}
+
+func fieldColumns(fields []*gorm.Field) (columns []string) {
+	for _, f := range fields {
+		columns = append(columns, f.DBName)
 	}
 	return
 }

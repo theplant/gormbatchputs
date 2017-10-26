@@ -227,6 +227,12 @@ var data = []*Country{
 	},
 }
 
+type Company struct {
+	Locale string `gorm:"primary_key"`
+	Code   string `gorm:"primary_key"`
+	Name   string
+}
+
 var findCountriesFunc = func(db *gorm.DB) interface{} {
 	var countries []*Country
 	err := db.Order("code ASC").Find(&countries).Error
@@ -253,8 +259,16 @@ var putCases = []struct {
 	preProcessors   []gormbatchputs.RowPreProcessor
 	findFunc        func(db *gorm.DB) interface{}
 	expectedResults interface{}
+	expectedError   error
 	stop            bool
 }{
+	{
+		name: "require one primary key",
+		data: []*Company{
+			{Locale: "en", Code: "AAA", Name: "ThePlant"},
+		},
+		expectedError: errors.New("table `companies` must have exactly one primary column, but has [locale code]"),
+	},
 	{
 		name:            "tree data",
 		data:            hData,
@@ -409,8 +423,16 @@ func TestPut(t *testing.T) {
 			OnlyColumns(c.onlyColumns...).
 			PreProcessors(c.preProcessors...)
 		err := bputs.Put(c.data)
-		if err != nil {
-			t.Fatal(err)
+		if c.expectedError != nil {
+			diff := testingutils.PrettyJsonDiff(c.expectedError.Error(), err.Error())
+			if len(diff) > 0 {
+				t.Error(c.name, diff)
+			}
+			continue
+		} else {
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		result := c.findFunc(db)
