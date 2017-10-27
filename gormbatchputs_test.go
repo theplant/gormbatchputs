@@ -30,7 +30,10 @@ type Country struct {
 }
 
 type DeliveryHub struct {
-	gorm.Model
+	ID        uint `gorm:"primary_key"`
+	CreatedAt *time.Time
+	UpdatedAt *time.Time
+	DeletedAt *time.Time `sql:"index"`
 
 	Name string
 
@@ -107,6 +110,7 @@ var curDay = now.BeginningOfDay()
 
 var hData = []*DeliveryHub{
 	{
+		ID:                     10,
 		Name:                   "Trinet",
 		NumberOfDay:            20,
 		DefaultSiteInterval:    5,
@@ -188,6 +192,7 @@ var hData = []*DeliveryHub{
 }
 var expectedHData = []*DeliveryHub{
 	{
+		ID:                     10,
 		Name:                   "Trinet",
 		NumberOfDay:            20,
 		DefaultSiteInterval:    5,
@@ -268,6 +273,14 @@ var putCases = []struct {
 			{Locale: "en", Code: "AAA", Name: "ThePlant"},
 		},
 		expectedError: errors.New("table `companies` must have exactly one primary column, but has [locale code]"),
+	},
+	{
+		name: "require primary key not be zero",
+		data: []*DeliveryHub{
+			{ID: 10, Name: "Hello"},
+			{Name: "Zero value"},
+		},
+		expectedError: errors.New("at rows 2, primary field `id` value is zero, but is required"),
 	},
 	{
 		name:            "tree data",
@@ -409,6 +422,7 @@ var EmptyData = gofixtures.Data(
 		``,
 		[]string{
 			"countries",
+			"delivery_hubs",
 		},
 	),
 )
@@ -417,12 +431,14 @@ func TestPut(t *testing.T) {
 	db := openAndMigrate()
 	for _, c := range putCases {
 		EmptyData.TruncatePut(db)
-		bputs := gormbatchputs.New(db).
+		bputs := gormbatchputs.New().
+			WithDB(db).
 			Verbose().
 			ExcludeColumns(c.excludeColumns...).
 			OnlyColumns(c.onlyColumns...).
-			PreProcessors(c.preProcessors...)
-		err := bputs.Put(c.data)
+			PreProcessors(c.preProcessors...).
+			Rows(c.data)
+		err := bputs.Put()
 		if c.expectedError != nil {
 			diff := testingutils.PrettyJsonDiff(c.expectedError.Error(), err.Error())
 			if len(diff) > 0 {

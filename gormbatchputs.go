@@ -12,13 +12,31 @@ import (
 type RowPreProcessor func(row interface{}) (skip bool, err error)
 type Batcher struct {
 	db               *gorm.DB
+	rows             interface{}
 	onlyColumns      []string
 	excludeColumns   []string
 	rowPreProcessors []RowPreProcessor
 }
 
-func New(db *gorm.DB) (b *Batcher) {
-	b = &Batcher{db: db}
+func clone(b *Batcher) (r *Batcher) {
+	r = &Batcher{
+		db:               b.db,
+		rows:             b.rows,
+		onlyColumns:      b.onlyColumns,
+		excludeColumns:   b.excludeColumns,
+		rowPreProcessors: b.rowPreProcessors,
+	}
+	return
+}
+
+func New() (b *Batcher) {
+	b = &Batcher{}
+	return
+}
+
+func (b *Batcher) WithDB(db *gorm.DB) (r *Batcher) {
+	r = clone(b)
+	r.db = db
 	return
 }
 
@@ -29,25 +47,31 @@ func (b *Batcher) Verbose() (r *Batcher) {
 }
 
 func (b *Batcher) OnlyColumns(columns ...string) (r *Batcher) {
-	b.onlyColumns = columns
-	r = b
+	r = clone(b)
+	r.onlyColumns = columns
 	return
 }
 
 func (b *Batcher) ExcludeColumns(columns ...string) (r *Batcher) {
-	b.excludeColumns = columns
-	r = b
+	r = clone(b)
+	r.excludeColumns = columns
 	return
 }
 
 func (b *Batcher) PreProcessors(procs ...RowPreProcessor) (r *Batcher) {
-	b.rowPreProcessors = procs
-	r = b
+	r = clone(b)
+	r.rowPreProcessors = procs
 	return
 }
 
-func (b *Batcher) Put(objects interface{}) (err error) {
-	val := reflect.ValueOf(objects)
+func (b *Batcher) Rows(rows interface{}) (r *Batcher) {
+	r = clone(b)
+	r.rows = rows
+	return
+}
+
+func (b *Batcher) Put() (err error) {
+	val := reflect.ValueOf(b.rows)
 	if val.Kind() != reflect.Array && val.Kind() != reflect.Slice {
 		panic("parameter must be array or slice")
 	}
@@ -84,6 +108,9 @@ func (b *Batcher) Put(objects interface{}) (err error) {
 		}
 
 		rowScp := b.db.NewScope(rowObj)
+		if rowScp.PrimaryKeyZero() {
+			return fmt.Errorf("at rows %d, primary field `%s` value is zero, but is required", i+1, rowScp.PrimaryField().DBName)
+		}
 		for _, f := range fields {
 			field, _ := rowScp.FieldByName(f.Name)
 			row = append(row, field.Field.Interface())
