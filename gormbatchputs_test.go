@@ -27,6 +27,13 @@ type Country struct {
 	Count        int
 	AvgAge       float64
 	Tall         bool
+	Population   int
+}
+
+type City struct {
+	Code       string `gorm:"primary_key" sql:"size:50"`
+	Name       string `sql:"size:500"`
+	Population int
 }
 
 type DeliveryHub struct {
@@ -475,6 +482,7 @@ func openAndMigrate() *gorm.DB {
 		&DeliveryDay{},
 		&DeliveryHour{},
 		&SiteInterval{},
+		&City{},
 	)
 	d.LogMode(true)
 
