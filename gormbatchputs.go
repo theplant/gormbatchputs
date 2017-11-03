@@ -11,20 +11,22 @@ import (
 
 type RowPreProcessor func(row interface{}) (skip bool, err error)
 type Batcher struct {
-	db               *gorm.DB
-	rows             interface{}
-	onlyColumns      []string
-	excludeColumns   []string
-	rowPreProcessors []RowPreProcessor
+	db                *gorm.DB
+	rows              interface{}
+	onlyColumns       []string
+	excludeColumns    []string
+	rowPreProcessors  []RowPreProcessor
+	maxSqlParamsCount int
 }
 
 func clone(b *Batcher) (r *Batcher) {
 	r = &Batcher{
-		db:               b.db,
-		rows:             b.rows,
-		onlyColumns:      b.onlyColumns,
-		excludeColumns:   b.excludeColumns,
-		rowPreProcessors: b.rowPreProcessors,
+		db:                b.db,
+		rows:              b.rows,
+		onlyColumns:       b.onlyColumns,
+		excludeColumns:    b.excludeColumns,
+		rowPreProcessors:  b.rowPreProcessors,
+		maxSqlParamsCount: b.maxSqlParamsCount,
 	}
 	return
 }
@@ -49,6 +51,12 @@ func (b *Batcher) Verbose() (r *Batcher) {
 func (b *Batcher) OnlyColumns(columns ...string) (r *Batcher) {
 	r = clone(b)
 	r.onlyColumns = columns
+	return
+}
+
+func (b *Batcher) MaxSqlParamsCount(count int) (r *Batcher) {
+	r = clone(b)
+	r.maxSqlParamsCount = count
 	return
 }
 
@@ -119,13 +127,20 @@ func (b *Batcher) Put() (err error) {
 		rows = append(rows, row)
 	}
 
-	err = batchputs.Put(
+	maxsc := b.maxSqlParamsCount
+	if maxsc == 0 {
+		maxsc = 65536
+	}
+
+	err = batchputs.CollectChangePutWithMaxSQLParamsCount(
 		b.db.DB(),
 		b.db.Dialect().GetName(),
 		tableName,
 		primaryKeyColumn,
 		columns,
 		rows,
+		nil,
+		maxsc,
 	)
 	if err != nil {
 		return
